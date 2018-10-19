@@ -57,23 +57,9 @@
 #include "windowapi.h"
 #include "utils/tuplestore.h"
 
-#include "parser/parse_expr.h" // for exprType
+#include "parser/parse_expr.h"
 
-
-bool enable_ttv_cr=true;
-bool enable_ttv_single=false;
-bool enable_ttv_level=false;
-
-int gap_size=3;//chuang kou zu da xiao xi shu
-int pre_fsize=100;
-int array_size=400;
-int recompute_k = 100;
-int recompute_num = 3;//htf ceng shu
-bool enable_locate = false;
-double pp = 1;
-const int samsize = 1000;
-bool issample = true;
-
+int samsize = 1024;
 /*
  * All the window function APIs are called with this object, which is passed
  * to window functions as fcinfo->context.
@@ -194,7 +180,6 @@ typedef struct WindowStatePerAggData
 	bool		transValueIsNull;
 
 	int64		transValueCount;	/* number of currently-aggregated rows */
-	//bool		noTransValue;//add by sgx
 	/* Data local to eval_windowaggregates() */
 	bool		restart;		/* need to restart this agg in this cycle? */
 } WindowStatePerAggData;
@@ -253,9 +238,8 @@ static Datum eval_bound_value(WindowAggState *winstate,
 							  bool *isnull);
 
 
-//start add by sgx
 static void eval_windowaggregates_sample(WindowAggState *winstate);
-//end add by sgx
+
 
 
 /*
@@ -433,7 +417,6 @@ call_transfunc(WindowAggState *winstate,
 												peraggstate->transtypeByVal,
 												peraggstate->transtypeLen);
 			peraggstate->transValueIsNull = false;
-			//peraggstate->noTransValue = false;//add by sgx
 			peraggstate->transValueCount = 1;
 			MemoryContextSwitchTo(oldContext);
 			return;
@@ -1997,6 +1980,7 @@ ExecWindowAgg(WindowAggState *winstate)
 	int			i;
 	int			numfuncs;
 
+
 	if (winstate->all_done)
 		return NULL;
 
@@ -2053,25 +2037,6 @@ restart:
 	 * already
 	 */
 	spool_tuples(winstate, winstate->currentpos);
-
-
-	if(winstate->spooled_rows%100000==0){
- 		int k = 0;
-	}
-
-
-	if(winstate->spooled_rows%10000==0){
- 		int k = 0;
-	}
-
-	if(winstate->spooled_rows%1000==0){
- 		int k = 0;
-	}
-
-	if(winstate->spooled_rows%100==0){
- 		int k = 0;
-	}
-
 
 
 	/* Move to the next partition if we reached the end of this partition */
@@ -2446,14 +2411,13 @@ ExecInitWindowAgg(WindowAgg *node, EState *estate, int eflags)
 	 * initialize by sgx
 	 */
 	int i;
+	winstate->samindex = palloc0(samsize*sizeof(int64));
 	for(i=0; i<samsize; ++i)
 		winstate->samindex[i] = 0;
 	winstate->numindex = 0;
 	winstate->indexheadpos = 0;
 
-	//add by iring
-
-	pp = atof(GetConfigOptionByName("sample_percent",NULL));
+	winstate->pp = atof(GetConfigOptionByName("sample_percent",NULL));
 
 	return winstate;
 }
@@ -3716,7 +3680,9 @@ eval_windowaggregates_sample(WindowAggState *winstate)
 	 * The frame head should never move backwards, and the code below wouldn't
 	 * cope if it did, so for safety we complain if it does.
 	 */
+	winstate->preframetailpos = winstate->frametailpos;
 	update_frameheadpos(agg_winobj, temp_slot);
+	update_frametailpos(agg_winobj, temp_slot);
 	if (winstate->frameheadpos < winstate->aggregatedbase)
 		elog(ERROR, "window frame head moved backward");
 
@@ -3811,7 +3777,6 @@ eval_windowaggregates_sample(WindowAggState *winstate)
 				continue;
 
 			wfuncno = peraggstate->wfuncno;
-			////printf("advance_windowaggregate_base---------------------\n");
 			ok = advance_windowaggregate_base(winstate,
 											  &winstate->perfunc[wfuncno],
 											  peraggstate);
@@ -3909,7 +3874,6 @@ eval_windowaggregates_sample(WindowAggState *winstate)
 	 */
 	if(winstate->numindex != 0)
 	{
-		//add by sgx
 		while(winstate->numindex > 0 && winstate->samindex[winstate->indexheadpos%samsize] < winstate->frameheadpos)
 		{
 			++(winstate->indexheadpos);
@@ -3918,12 +3882,12 @@ eval_windowaggregates_sample(WindowAggState *winstate)
 
 		if(winstate->indexheadpos > samsize)
 			winstate->indexheadpos = winstate->indexheadpos % samsize;
-		//end add
 
 		int cnt = 0;
+		bool isNew = false;
 		for (;;)
 		{
-			if(cnt < winstate->numindex)
+			if(!isNew && cnt < winstate->numindex)
 			{
 				winstate->aggregatedupto = winstate->samindex[(winstate->indexheadpos+cnt)%samsize];
 				/* Fetch next row if we didn't already */
@@ -3955,7 +3919,6 @@ eval_windowaggregates_sample(WindowAggState *winstate)
 					advance_windowaggregate(winstate,
 											&winstate->perfunc[wfuncno],
 											peraggstate);
-					//printf("eraggstate->transValue:%f\n",DatumGetFloat8(peraggstate->transValue));
 				}
 
 				/* Reset per-input-tuple context after each tuple */
@@ -3964,11 +3927,15 @@ eval_windowaggregates_sample(WindowAggState *winstate)
 				/* And advance the aggregated-row state */
 				winstate->aggregatedupto++;
 				ExecClearTuple(agg_row_slot);
-				//add by sgx
 				++cnt;
 			}
 			else
 			{
+				/* we meet new tuple here, we set the aggregatedupto to where sample begins and isNew=true */
+				if(!isNew){
+					winstate->aggregatedupto = winstate->preframetailpos + 1;
+					isNew = true;
+				}
 				/* Fetch next row if we didn't already */
 				if (TupIsNull(agg_row_slot))
 				{
@@ -3981,9 +3948,19 @@ eval_windowaggregates_sample(WindowAggState *winstate)
 				if (!row_is_in_frame(winstate, winstate->aggregatedupto, agg_row_slot))
 					break;
 
-				if(drand48() < pp)
+				if(drand48() < winstate->pp)
 				{
-					//agg by sgx
+					/* if window size is not enough for sample index, we double it. */
+					if(winstate->numindex>samsize-1){
+						int64* tempindex = winstate->samindex;
+						winstate->samindex = palloc0(sizeof(int64) * samsize*2);
+						memcpy(winstate->samindex,tempindex+winstate->indexheadpos,(samsize-winstate->indexheadpos)*sizeof(int64));
+						memcpy(winstate->samindex+samsize-winstate->indexheadpos,tempindex,winstate->indexheadpos*sizeof(int64));
+						samsize *= 2;
+						winstate->indexheadpos = 0;
+						pfree(tempindex);
+					}
+
 					winstate->samindex[(winstate->indexheadpos+winstate->numindex)%samsize] = winstate->aggregatedupto;
 					++(winstate->numindex);
 					/* Set tuple context for evaluation of aggregate arguments */
@@ -3999,14 +3976,11 @@ eval_windowaggregates_sample(WindowAggState *winstate)
 							winstate->aggregatedupto < aggregatedupto_nonrestarted)
 							continue;
 
-						//if(drand48() < pp && winstate->aggregatedupto != winstate->currentpos )
-						//	continue;
 
 						wfuncno = peraggstate->wfuncno;
 						advance_windowaggregate(winstate,
 												&winstate->perfunc[wfuncno],
 												peraggstate);
-						//printf("eraggstate->transValue:%f\n",DatumGetFloat8(peraggstate->transValue));
 					}
 
 					/* Reset per-input-tuple context after each tuple */
@@ -4018,9 +3992,10 @@ eval_windowaggregates_sample(WindowAggState *winstate)
 			}
 		}
 	}
+
+	/* for the first tuple */
 	else
 	{
-		//add by sgx
 		winstate->numindex = 0;
 		winstate->indexheadpos = 0;
 
@@ -4039,9 +4014,17 @@ eval_windowaggregates_sample(WindowAggState *winstate)
 				if (!row_is_in_frame(winstate, winstate->aggregatedupto, agg_row_slot))
 					break;
 
-				if(drand48() < pp)
+				if(drand48() < winstate->pp)
 				{
-					//agg by sgx
+					//if window size is not enough for sample index, we double it.
+					if(winstate->numindex>samsize-1){
+						int64* tempindex = winstate->samindex;
+						winstate->samindex = palloc0(sizeof(int64) * samsize*2);
+						memcpy(winstate->samindex,tempindex,samsize*sizeof(int64));
+						samsize *= 2;
+						pfree(tempindex);
+					}
+
 					winstate->samindex[(winstate->indexheadpos+winstate->numindex)%samsize] = winstate->aggregatedupto;
 					++(winstate->numindex);
 					/* Set tuple context for evaluation of aggregate arguments */
@@ -4057,14 +4040,10 @@ eval_windowaggregates_sample(WindowAggState *winstate)
 							winstate->aggregatedupto < aggregatedupto_nonrestarted)
 							continue;
 
-						//if(drand48() < pp && winstate->aggregatedupto != winstate->currentpos )
-						//	continue;
-
 						wfuncno = peraggstate->wfuncno;
 						advance_windowaggregate(winstate,
 												&winstate->perfunc[wfuncno],
 												peraggstate);
-						//printf("eraggstate->transValue:%f\n",DatumGetFloat8(peraggstate->transValue));
 					}
 
 					/* Reset per-input-tuple context after each tuple */
@@ -4076,7 +4055,6 @@ eval_windowaggregates_sample(WindowAggState *winstate)
 
 		}
 	}
-
 	/* The frame's end is not supposed to move backwards, ever */
 	Assert(aggregatedupto_nonrestarted <= winstate->aggregatedupto);
 
@@ -4089,7 +4067,6 @@ eval_windowaggregates_sample(WindowAggState *winstate)
 		bool	   *isnull;
 
 		peraggstate = &winstate->peragg[i];
-		//peraggstate->transValue = Float8GetDatum(DatumGetFloat8(peraggstate->transValue)*3);
 		wfuncno = peraggstate->wfuncno;
 		result = &econtext->ecxt_aggvalues[wfuncno];
 		isnull = &econtext->ecxt_aggnulls[wfuncno];

@@ -2732,12 +2732,13 @@ typedef struct WindowAggState
 	TupleTableSlot *temp_slot_2;
 
 	/*
-	 * sample pos  by sgx
+	 * sample code
 	 */
-	int64	samindex[1000]; //sample index, recursive used to save memory 
+	int64*	samindex; //temp window for sample index, this will be used for delta sample. The initial size is 1024 and we sample size is larger,we double it.
 	int numindex;
 	int indexheadpos;
-	//end by sgx
+	double pp;
+	int64	preframetailpos;	/* preceding frame tail position */
 
 } WindowAggState;
 
