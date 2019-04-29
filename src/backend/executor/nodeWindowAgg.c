@@ -180,6 +180,7 @@ typedef struct WindowStatePerAggData
 	bool		transValueIsNull;
 
 	int64		transValueCount;	/* number of currently-aggregated rows */
+	
 	/* Data local to eval_windowaggregates() */
 	bool		restart;		/* need to restart this agg in this cycle? */
 } WindowStatePerAggData;
@@ -2097,18 +2098,6 @@ restart:
 	 */
 	if (winstate->numaggs > 0)
 	{
-		/*
-		char* enable_sample = GetConfigOptionByName("enable_sample",NULL);
-		if(enable_ttv[0]=='1'){
-			eval_windowaggregates_ttv_cr_array(winstate);
-		}else if(enable_ttv[0]=='2'){
-			eval_windowaggregates_ttv_single(winstate);
-		}else if(enable_ttv[0]=='3'){
-			eval_windowaggregates_ttv_level(winstate);
-		}else{
-			eval_windowaggregates(winstate);
-		}
-		*/
 		char* enable_sample = GetConfigOptionByName("enable_sample",NULL);
 		if(enable_sample[0]=='1')
 			eval_windowaggregates_sample(winstate);
