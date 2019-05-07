@@ -2739,13 +2739,6 @@ typedef struct WindowAggState
 	int indexheadpos;
 	double pp;
 	int64	preframetailpos;	/* preceding frame tail position */
-	Datum previous_top_value; //the previous frame's begin value
-	Datum current_bottom_value;//the current frame's last value
-	Datum cursum;
-	Datum lastsum;
-	Datum last_bottom_value;
-	//TupleTableSlot *cbv;
-	int64 frame_size; /* the size of current frame */
 
 } WindowAggState;
 

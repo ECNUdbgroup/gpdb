@@ -79,10 +79,7 @@
  *		in turn call these routines themselves on their subplans.
  */
 #include "postgres.h"
-#include "access/relscan.h"
-#include "executor/execdebug.h"
-#include "executor/nodeSeqscan.h"
-#include "utils/rel.h"
+
 #include "executor/executor.h"
 #include "executor/nodeAgg.h"
 #include "executor/nodeAppend.h"
@@ -139,14 +136,6 @@
 #include "pg_trace.h"
 #include "tcop/tcopprot.h"
 #include "utils/metrics_utils.h"
-
-#include "utils/snapshot.h"
-#include "utils/snapmgr.h"
-#include "access/heapam.h"
-#include "executor/tuptable.h"
-
-/*(yz)Use flag to control when entering the window function for the first time*/
-//bool flag=true;
 
  /* flags bits for planstate walker */
 #define PSW_IGNORE_INITPLAN    0x01
@@ -953,14 +942,13 @@ ExecProcNode(PlanState *node)
 {
 	TupleTableSlot *result = NULL;
 
-
 	START_MEMORY_ACCOUNT(node->memoryAccountId);
 	{
 
 	CHECK_FOR_INTERRUPTS();
 
 	/*
-	 * Even if we are requestedgps to finish query, Motion has to do its work
+	 * Even if we are requested to finish query, Motion has to do its work
 	 * to tell End of Stream message to upper slice.  He will probably get
 	 * NULL tuple from underlying operator by calling another ExecProcNode,
 	 * so one additional operator execution should not be a big hit.
@@ -1118,7 +1106,6 @@ ExecProcNode(PlanState *node)
 
 		case T_SortState:
 			result = ExecSort((SortState *) node);
-			Datum d;//=slot_getattr(result,3,NULL);
 			break;
 
 		case T_AggState:
@@ -1154,36 +1141,6 @@ ExecProcNode(PlanState *node)
 			break;
 
 		case T_WindowAggState:
-/*
-			if(flag){
-
-				Snapshot snapshot;
-				HeapScanDesc heapscan,scan;
-				TupleTableSlot *slot;
-				HeapTuple heaptuple;
-				Relation	current_rel;
-
-				//scan=((SeqScanState *)node)->opaque->ss_currentScanDesc;
-				current_rel=((WindowAggState *)node)->ss.ss_currentRelation;
-				snapshot = RegisterSnapshot(GetTransactionSnapshot());
-				heapscan = heap_beginscan(current_rel,snapshot,0,NULL);
-
-				slot = MakeSingleTupleTableSlot(RelationGetDescr(scan->rs_rd));
-
-				int count=0;
-				while((heaptuple = heap_getnext(heapscan, ForwardScanDirection)) != NULL){
-				     //ExecStoreTuple(heapTuple, slot, InvalidBuffer, false);
-				 	 //iDatum = slot_getattr(slot, keycol, &isNull);
-					count++;
-				}
-
-				UnregisterSnapshot(snapshot);
-				ExecDropSingleTupleTableSlot(slot);
-				heap_endscan(heapscan);
-
-				flag=false;
-			}
-*/
 			result = ExecWindowAgg((WindowAggState *) node);
 			break;
 

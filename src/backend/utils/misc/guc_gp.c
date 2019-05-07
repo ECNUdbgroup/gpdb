@@ -3024,6 +3024,17 @@ struct config_bool ConfigureNamesBool_gp[] =
 		check_gp_resource_group_bypass, NULL, NULL
 	},
 
+	/* added by qww */
+	{
+		{"enable_sample", PGC_USERSET, PRESET_OPTIONS,
+			gettext_noop("sample methods"),
+			NULL,
+			GUC_NOT_IN_SAMPLE
+		},
+		&enable_sample,
+		0, 0, INT_MAX, NULL, NULL
+	},
+	
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, false, NULL, NULL
@@ -4299,18 +4310,6 @@ struct config_int ConfigureNamesInt_gp[] =
 			GUC_GPDB_ADDOPT | GUC_NOT_IN_SAMPLE
 		},
 		&gp_max_slices,
-		0, 0, INT_MAX, NULL, NULL
-	},
-
-
-	/* added by qww */
-	{
-		{"enable_sample", PGC_USERSET, PRESET_OPTIONS,
-			gettext_noop("sample methods"),
-			NULL,
-			GUC_NOT_IN_SAMPLE
-		},
-		&enable_sample,
 		0, 0, INT_MAX, NULL, NULL
 	},
 
