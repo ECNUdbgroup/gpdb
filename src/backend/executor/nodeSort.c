@@ -178,17 +178,27 @@ ExecSort(SortState *node)
 		/*
 		 * Scan the subplan and feed all the tuples to tuplesort.
 		 */
-
+		int count=0;
 		for (;;)
 		{
+			count++;
 			slot = ExecProcNode(outerNode);
+
+			Datum Dlook;
+			int32 lookint;
+			if(outerNode->type==T_MotionState){
+				//Dlook=slot_getattr(slot,,NULL);
+				//lookint=DatumGetInt32(Dlook);
+			}
+			lookint;
+
 
 			if (TupIsNull(slot))
 				break;
 
 			tuplesort_puttupleslot(tuplesortstate, slot);
 		}
-
+		count;
 		SIMPLE_FAULT_INJECTOR(ExecSortBeforeSorting);
 
 		/*
@@ -242,6 +252,8 @@ ExecSort(SortState *node)
 	 * tuples.
 	 */
 	slot = node->ss.ps.ps_ResultTupleSlot;
+
+
 	(void) tuplesort_gettupleslot(tuplesortstate,
 								  ScanDirectionIsForward(dir),
 								  slot);
